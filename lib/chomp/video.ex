@@ -157,16 +157,15 @@ defmodule Chomp.Video do
     end
   end
 
-  # Format filter: 720p max for landscape OR portrait videos
-  @format_filter "bestvideo[height<=720]/bestvideo[width<=720]+bestaudio/best[height<=720]/best[width<=720]/best"
+  # Format filter: prefer H.264 (avc) for iOS compatibility, fall back to any codec
+  # 720p max, always include audio for sites with separate streams (YouTube)
+  @format_filter "bestvideo[height<=720][vcodec^=avc]+bestaudio/bestvideo[width<=720][vcodec^=avc]+bestaudio/bestvideo[height<=720]+bestaudio/bestvideo[width<=720]+bestaudio/best[height<=720]/best[width<=720]/best"
 
   defp get_video_info(url) do
     args = [
       "--dump-json",
       "--no-download",
       "-f", @format_filter,
-      # YouTube bot detection workarounds
-      "--extractor-args", "youtube:player_client=ios,web",
       url
     ]
 
@@ -196,21 +195,75 @@ defmodule Chomp.Video do
       "--merge-output-format", "mp4",
       "-o", output_template,
       "--no-playlist",
-      # YouTube bot detection workarounds
-      "--extractor-args", "youtube:player_client=ios,web",
       url
     ]
 
     case System.cmd("yt-dlp", args, stderr_to_stdout: true) do
       {_output, 0} ->
         case Path.wildcard(Path.join(work_dir, "video.*")) do
-          [path] -> {:ok, path, filename}
+          [path] -> ensure_compatible(path, work_dir, filename, progress_callback)
           [] -> {:error, "Download completed but file not found"}
           _ -> {:error, "Multiple files found after download"}
         end
 
       {error, _} ->
         {:error, "Download failed: #{String.slice(error, 0, 500)}"}
+    end
+  end
+
+  defp ensure_compatible(video_path, work_dir, filename, progress_callback) do
+    case get_video_codec(video_path) do
+      {:ok, codec} when codec in ["h264", "avc1"] ->
+        {:ok, video_path, filename}
+
+      {:ok, other_codec} ->
+        Logger.info("Video codec is #{other_codec}, transcoding to H.264 for iOS compatibility")
+        progress_callback.("Converting for compatibility...")
+        transcode_to_h264(video_path, work_dir, filename)
+
+      :error ->
+        Logger.warning("Could not detect video codec, transcoding to be safe")
+        progress_callback.("Converting for compatibility...")
+        transcode_to_h264(video_path, work_dir, filename)
+    end
+  end
+
+  defp get_video_codec(path) do
+    args = [
+      "-v", "error",
+      "-select_streams", "v:0",
+      "-show_entries", "stream=codec_name",
+      "-of", "default=noprint_wrappers=1:nokey=1",
+      path
+    ]
+
+    case System.cmd("ffprobe", args, stderr_to_stdout: true) do
+      {codec, 0} -> {:ok, String.trim(codec)}
+      _ -> :error
+    end
+  end
+
+  defp transcode_to_h264(input_path, work_dir, filename) do
+    output_path = Path.join(work_dir, "transcoded.mp4")
+
+    args = [
+      "-i", input_path,
+      "-c:v", "libx264",
+      "-preset", "fast",
+      "-crf", "23",
+      "-c:a", "aac",
+      "-movflags", "+faststart",
+      "-y",
+      output_path
+    ]
+
+    case System.cmd("ffmpeg", args, stderr_to_stdout: true) do
+      {_, 0} ->
+        File.rm(input_path)
+        {:ok, output_path, filename}
+
+      {error, _} ->
+        {:error, "Transcoding failed: #{String.slice(error, 0, 200)}"}
     end
   end
 
