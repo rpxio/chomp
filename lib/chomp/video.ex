@@ -161,7 +161,14 @@ defmodule Chomp.Video do
   @format_filter "bestvideo[height<=720]/bestvideo[width<=720]+bestaudio/best[height<=720]/best[width<=720]/best"
 
   defp get_video_info(url) do
-    args = ["--dump-json", "--no-download", "--no-warnings", "-f", @format_filter, url]
+    args = [
+      "--dump-json",
+      "--no-download",
+      "-f", @format_filter,
+      # YouTube bot detection workarounds
+      "--extractor-args", "youtube:player_client=ios,web",
+      url
+    ]
 
     case System.cmd("yt-dlp", args, stderr_to_stdout: true) do
       {output, 0} ->
@@ -169,11 +176,11 @@ defmodule Chomp.Video do
 
         case json_start do
           [json] -> {:ok, Jason.decode!(json)}
-          nil -> {:error, "No JSON in yt-dlp output"}
+          nil -> {:error, "No JSON in yt-dlp output: #{String.slice(output, 0, 500)}"}
         end
 
       {error, _} ->
-        {:error, "Failed to get video info: #{String.slice(error, 0, 200)}"}
+        {:error, "Failed to get video info: #{String.slice(error, 0, 500)}"}
     end
   rescue
     e -> {:error, "Failed to parse video info: #{inspect(e)}"}
@@ -189,6 +196,8 @@ defmodule Chomp.Video do
       "--merge-output-format", "mp4",
       "-o", output_template,
       "--no-playlist",
+      # YouTube bot detection workarounds
+      "--extractor-args", "youtube:player_client=ios,web",
       url
     ]
 
@@ -201,7 +210,7 @@ defmodule Chomp.Video do
         end
 
       {error, _} ->
-        {:error, "Download failed: #{String.slice(error, 0, 200)}"}
+        {:error, "Download failed: #{String.slice(error, 0, 500)}"}
     end
   end
 

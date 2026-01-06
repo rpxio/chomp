@@ -35,3 +35,10 @@ chomp-*.tar
 npm-debug.log
 /assets/node_modules/
 
+# Environment files with secrets
+.env
+.env.local
+
+# Deployment scripts (kept locally, not in repo)
+/deploy/
+

@@ -1,0 +1,12 @@
+services:
+  chomp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    network_mode: host
+    env_file:
+      - .env
+    environment:
+      - PHX_SERVER=true
+      - PORT=8080
+    restart: unless-stopped
