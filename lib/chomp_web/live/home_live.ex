@@ -18,7 +18,7 @@ defmodule ChompWeb.HomeLive do
   def render(assigns) do
     ~H"""
     <.flash kind={:error} flash={@flash} />
-    <div class="flex flex-col items-center justify-center min-h-[60vh]">
+    <div class="flex flex-col items-center justify-center min-h-[60vh] px-4">
       <%= case @state do %>
         <% state when state in [:idle, :processing, :error] -> %>
           <p class={["text-sm mb-4", @state == :error && "text-error", @state != :error && "text-base-content/70"]}>
@@ -48,7 +48,7 @@ defmodule ChompWeb.HomeLive do
               id="url-input"
               value={@url}
               placeholder="https://..."
-              class="input input-bordered flex-1"
+              class="input input-bordered flex-1 text-base"
               disabled={@state == :processing}
               required
             />
